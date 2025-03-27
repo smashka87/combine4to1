@@ -2,6 +2,7 @@ from telegram import Update, InputMediaPhoto
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from PIL import Image
 import io
+import os
 
 # Store user images temporarily
 user_images = {}
@@ -45,7 +46,9 @@ def combine_images(images_bytes):
     return new_image
 
 if __name__ == '__main__':
-    bot_token = "7739487074:AAFe534Etiqom7vv6JoBiwO5kYehP-Sfek8"
+    # bot_token = "7739487074:AAFe534Etiqom7vv6JoBiwO5kYehP-Sfek8"
+    TOKEN = os.environ["BOT_TOKEN"]
+    bot_token = TOKEN
     app = ApplicationBuilder().token(bot_token).build()
 
     app.add_handler(CommandHandler("start", start))
