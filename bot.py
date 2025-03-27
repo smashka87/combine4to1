@@ -1,4 +1,4 @@
-from telegram import Update, InputMediaPhoto
+from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from PIL import Image
 import io
@@ -7,8 +7,16 @@ import os
 # Store user images temporarily
 user_images = {}
 
+# Grid and size config
+COLUMNS = 2
+ROWS = 2
+CELL_WIDTH = 300
+CELL_HEIGHT = 450
+FINAL_WIDTH = CELL_WIDTH * COLUMNS
+FINAL_HEIGHT = CELL_HEIGHT * ROWS
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me 4 images one by one and I’ll combine them into a 2x2 image.")
+    await update.message.reply_text("Send me 4 images one by one and I’ll combine them into a 2:3 ratio image.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -24,7 +32,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if count < 4:
         await update.message.reply_text(f"Received image {count}/4. Please send {4 - count} more.")
     else:
-        await update.message.reply_text("Combining images...")
+        await update.message.reply_text("Combining images into 2:3 layout...")
         combined_image = combine_images(user_images[user_id])
         bio = io.BytesIO()
         bio.name = 'combined.jpg'
@@ -34,22 +42,40 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=bio)
         user_images[user_id] = []  # Reset after sending
 
+def crop_to_fit(image, target_width, target_height):
+    original_width, original_height = image.size
+    target_ratio = target_width / target_height
+    original_ratio = original_width / original_height
+
+    if original_ratio > target_ratio:
+        # Crop width
+        new_width = int(target_ratio * original_height)
+        offset = (original_width - new_width) // 2
+        box = (offset, 0, offset + new_width, original_height)
+    else:
+        # Crop height
+        new_height = int(original_width / target_ratio)
+        offset = (original_height - new_height) // 2
+        box = (0, offset, original_width, offset + new_height)
+
+    return image.crop(box).resize((target_width, target_height), Image.ANTIALIAS)
+
 def combine_images(images_bytes):
-    images = [Image.open(io.BytesIO(img)).resize((300, 300)) for img in images_bytes]
-    new_image = Image.new('RGB', (600, 600))
+    images = [Image.open(io.BytesIO(img)) for img in images_bytes]
+    processed_images = [crop_to_fit(img, CELL_WIDTH, CELL_HEIGHT) for img in images]
 
-    new_image.paste(images[0], (0, 0))
-    new_image.paste(images[1], (300, 0))
-    new_image.paste(images[2], (0, 300))
-    new_image.paste(images[3], (300, 300))
+    combined = Image.new('RGB', (FINAL_WIDTH, FINAL_HEIGHT))
 
-    return new_image
+    for idx, img in enumerate(processed_images):
+        x = (idx % COLUMNS) * CELL_WIDTH
+        y = (idx // COLUMNS) * CELL_HEIGHT
+        combined.paste(img, (x, y))
+
+    return combined
 
 if __name__ == '__main__':
-    # bot_token = "7739487074:AAFe534Etiqom7vv6JoBiwO5kYehP-Sfek8"
     TOKEN = os.environ["BOT_TOKEN"]
-    bot_token = TOKEN
-    app = ApplicationBuilder().token(bot_token).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
